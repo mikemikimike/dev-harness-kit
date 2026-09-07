@@ -491,11 +491,8 @@ sequenceDiagram
 다음 실행은 별도 플래그 없이 3단계부터 시작한다.
 
 **단계 진행 중에 계획이 틀렸다는 게 드러났다.**
-[`/dev-kit:adapt`](commands/adapt.md)를 실행한다. 진행 중인 단계를
-일시 중지하고, 계획과 실제 출력이 어긋나는 지점을 보여주고, 명세/단계
-파일에 대한 작은 패치 하나를 제안하며 — 사용자가 승인한 **뒤에만** 패치를
-작성하고 빌드를 재개한다. 작은 수정에 쓰고, 계획 전체가 뿌리부터 틀렸다면
-대신 `/dev-kit:plan`을 다시 실행한다.
+`/dev-kit:plan`을 좁은 범위로 다시 실행하고 그곳에서 빌드를 이어간다.
+계획 전체가 뿌리부터 틀렸을 때 사용한다.
 
 **다음 날 또는 다른 터미널**로 돌아왔고 어디까지 했는지 잃어버렸다.
 `python3 tools/session_monitor.py`를 실행한다. 저장소 워크트리 전반의
@@ -514,7 +511,7 @@ sequenceDiagram
 **전체 계획 없이 Build로 직행하고 싶다.** 현재로는 **원커맨드 우회
 방법이 없다.** 정직한 선택지는 `/dev-kit:plan`을 매우 좁게 범위화하거나
 (1–2단계 계획을 빠르게 뱉을 수 있다) 최소 `phases/<name>/index.json`을
-직접 시드하는 것이다. [워크플로 시나리오 문서](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-5-전체-계획-없이-build로-직행)에서
+직접 시드하는 것이다. [워크플로 시나리오 문서](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-4-전체-계획-없이-build로-직행)에서
 두 방법과 제거된 `tdd-fast` / `quick-fix` 단축키가 옵션이 아닌 이유를
 설명한다.
 
@@ -559,7 +556,7 @@ git worktree add -b feat/my-task .worktrees/feat-my-task origin/main
 | 망가진 흐름에서 복구 | [`docs/workflow/WORKFLOW-SCENARIOS.ko.md`](docs/workflow/WORKFLOW-SCENARIOS.ko.md) |
 | 비용 감사 또는 사실 주장 검증 | [`docs/observability/token-efficiency.ko.md`](docs/observability/token-efficiency.ko.md) |
 | 새 셸에서 세션 재개 | [`docs/observability/session-monitor.ko.md`](docs/observability/session-monitor.ko.md) |
-| 이 저장소가 제공하는 커스텀 서브에이전트 보기 | [`docs/proposals/agent-architecture/multi-agent-design.md`](docs/proposals/agent-architecture/multi-agent-design.md) |
+| 이 저장소가 제공하는 커스텀 서브에이전트 보기 | [`docs/proposals/review/agent-architecture/multi-agent-design.md`](docs/proposals/review/agent-architecture/multi-agent-design.md) |
 
 나머지 — HTML 형제, 한국어 문서, 깊은 레퍼런스 — 는
 [`docs/home/DOC-MAP.md`](docs/home/DOC-MAP.md)에 있다. 5분이 있다면
@@ -840,7 +837,7 @@ Enter를 누르면 피커가 세션의 워크트리로 이동해 대화를 다�
 (termios + ANSI, curses 미사용), "왜 스킬과 함께 도구인가" 근거는
 [`docs/observability/session-monitor.ko.md`](docs/observability/session-monitor.ko.md).
 "언제" 손을 대는지 서사(다른 터미널/다른 날에서 재개)는
-[워크플로 시나리오, Case 3](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-3-다른-터미널또는-날에서-돌아옴) 참고.
+[워크플로 시나리오, Case 2](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-2-다른-터미널또는-날에서-돌아옴) 참고.
 
 ### 스킬 사용량(`/dev-kit:skill-usage`)
 
@@ -886,7 +883,7 @@ classify_all_worktrees()` 경유) `live`/`unknown`에 한해 제거 후보만
    에이전트 파일에 재구현하지 말 것.
 
 `worktree-janitor`의 제안 + 디스패치 컨텍스트 계약(배치를 오케스트레이터에
-넘기는 측) 은 [`docs/proposals/agent-architecture/multi-agent-design.md`](docs/proposals/agent-architecture/multi-agent-design.md).
+넘기는 측) 은 [`docs/proposals/review/agent-architecture/multi-agent-design.md`](docs/proposals/review/agent-architecture/multi-agent-design.md).
 에이전트 도구 핸드오프 계약(디스패치 + 보고 두 봉투) 은
 [`docs/architecture/multi-agent-orchestration-research.md`](docs/architecture/multi-agent-orchestration-research.md).
 
@@ -919,7 +916,7 @@ classify_all_worktrees()` 경유) `live`/`unknown`에 한해 제거 후보만
 `blocking_findings`)는 `lib/valuation_engine.py:decision_is_canonical_envelope`로
 고정되어 있다. 비-`proceed` 판정에 대해 Build를 하드 차단하던 자동
 게이트가 #463에서 제거되었다 — 실제로 어떤 의미인지 [워크플로 시나리오
-문서 Case 4](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-4-valuate-단계-건너뛰기) 참고.
+문서 Case 3](docs/workflow/WORKFLOW-SCENARIOS.ko.md#case-3-valuate-단계-건너뛰기) 참고.
 
 **에이전트 행동 및 하네스 효과성 평가** — `/dev-kit:evaluate`는 기존
 트랜스크립트/루브릭 평가를 유지한다. 하네스 효과성 설계는 legacy D1–D7
