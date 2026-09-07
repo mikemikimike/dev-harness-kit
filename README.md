@@ -258,12 +258,9 @@ in_progress → completed`), and re-running always picks up from the first step
 that isn't `completed`. Closing your laptop after step 2 means the next run starts
 at step 3 — no flag, no re-planning.
 
-**The plan turned out wrong while a step was in progress.** Run
-[`/dev-kit:adapt`](commands/adapt.md). It pauses the in-flight step, shows you
-exactly where the plan and the actual output disagree, proposes one small patch to
-the spec/step file, and — only after you approve it — writes the patch and resumes
-the build. Use this for a small correction; if the whole plan is wrong at the
-root, re-run `/dev-kit:plan` instead.
+**The plan turned out wrong while a step was in progress.** Re-run
+`/dev-kit:plan` with a tightly-scoped prompt and resume from there. Use this for a
+small correction; if the whole plan is wrong at the root, re-plan it from scratch.
 
 **You came back on a different day or a different terminal** and lost your place.
 Run `python3 tools/session_monitor.py`. It lists your recent sessions across the
@@ -291,7 +288,7 @@ small obvious work; rely on it as a sanity check on bigger bets.
 one-command bypass** today. Your honest options are to scope `/dev-kit:plan` very
 tightly (it can emit a one- or two-step plan quickly) or to hand-seed a minimal
 `phases/<name>/index.json` yourself. The [workflow scenarios
-doc](docs/workflow/WORKFLOW-SCENARIOS.md#case-5-skipping-straight-to-build-without-a-full-plan)
+doc](docs/workflow/WORKFLOW-SCENARIOS.md#case-4-skipping-straight-to-build-without-a-full-plan)
 explains both, and why the removed `tdd-fast` / `quick-fix` shortcuts are not an
 option anymore.
 
