@@ -20,32 +20,67 @@ set -euo pipefail
 # Inspect the index before any tool-specific check.  A clean worktree can hide
 # conflict markers or other invalid bytes that are already staged for commit.
 # Exit 1 means no match; every other non-zero status is an index/read error.
-if conflict_markers=$(git grep --cached -n -E '(<{7}|={7}|\|{7}|>{7})' -- .); then
+#
+# Use NUL-terminated output (-z) so paths and grep hits containing quote,
+# backslash, space, tab, or newline bytes survive the round-trip intact.
+# `git grep -z -n` emits `path<NUL>lineno:content<...>` blocks.
+#
+# The pattern is anchored with `^[ \t]*` so it only fires on the seven-char
+# run at the start of a (possibly-indented) line. Caveat: a Markdown Setext
+# underline (`=======` under a heading) still matches; deeper context-aware
+# suppression would require multi-line state and is intentionally out of
+# scope for this hook.
+#
+# NOTE: bash command substitution ($( ... )) silently strips NUL bytes from
+# stdout, which would glue every hit together. We redirect directly to a
+# temp file (NUL-preserving), read it back via `read -d ''`, and clean up
+# before exit.
+grep_tmp=$(mktemp "${TMPDIR:-/tmp}/pre-commit-grep.XXXXXX")
+if git grep --cached -z -n -E '^[ \t]*(<{7}|={7}|\|{7}|>{7})' -- . > "$grep_tmp"; then
   echo "[pre-commit] BLOCKED: staged conflict marker found." >&2
-  printf '%s\n' "$conflict_markers" >&2
+  # Print one finding per line.
+  while IFS= read -r -d '' hit; do
+    if [ -n "$hit" ]; then
+      printf '%s\n' "$hit" >&2
+    fi
+  done < "$grep_tmp"
+  rm -f -- "$grep_tmp"
   exit 1
 else
   grep_status=$?
+  rm -f -- "$grep_tmp"
   if [ "$grep_status" -ne 1 ]; then
     echo "[pre-commit] ERROR: unable to inspect staged content (git grep exited $grep_status)." >&2
     exit "$grep_status"
   fi
 fi
 
-if staged_file_list=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py'); then
+# Use `git ls-files -z` so filenames with embedded quote, backslash, space,
+# tab, or newline bytes are emitted verbatim (no C-style quoting that would
+# later confuse `git checkout-index`). `git diff --name-only` C-quotes such
+# paths, which broke filenames like `quote"file.py` or `with space.py`.
+#
+# NOTE: bash command substitution ($( ... )) strips NUL bytes from the
+# captured stdout, which would collapse every entry into one unreadable
+# blob. We redirect directly to a file instead so the NUL delimiters
+# survive intact; the file is `rm`-ed in the existing EXIT trap.
+staged_list_tmp=$(mktemp "${TMPDIR:-/tmp}/pre-commit-staged-list.XXXXXX")
+if git ls-files --cached -z -- '*.py' > "$staged_list_tmp"; then
   :
 else
   diff_status=$?
-  echo "[pre-commit] ERROR: unable to list staged Python files (git diff exited $diff_status)." >&2
+  rm -f -- "$staged_list_tmp"
+  echo "[pre-commit] ERROR: unable to list staged Python files (git ls-files exited $diff_status)." >&2
   exit "$diff_status"
 fi
 
 staged_files=()
-while IFS= read -r file; do
+while IFS= read -r -d '' file; do
   if [ -n "$file" ]; then
     staged_files+=("$file")
   fi
-done <<< "$staged_file_list"
+done < "$staged_list_tmp"
+rm -f -- "$staged_list_tmp"
 
 # Non-Python commits remain a no-op, even when Ruff is not installed.
 if [ "${#staged_files[@]}" -eq 0 ]; then
@@ -58,7 +93,6 @@ if ! command -v ruff >/dev/null 2>&1; then
   exit 1
 fi
 
-ruff_status=0
 if repo_root=$(git rev-parse --show-toplevel); then
   :
 else

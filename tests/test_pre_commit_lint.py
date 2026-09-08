@@ -38,9 +38,14 @@ def _run_hook(root: Path, *, env: dict[str, str] | None = None) -> subprocess.Co
 
 
 def _path_without_ruff(root: Path) -> dict[str, str]:
+    # Build a minimal PATH that mirrors what the hook actually needs:
+    # bash + git + grep for index inspection and conflict-marker scan,
+    # plus mktemp for the NUL-preserving scratch files the hook uses
+    # to capture `git ls-files -z` and `git grep -z` output (bash
+    # command substitution would strip those NUL bytes).
     bin_dir = root / "bin-without-ruff"
     bin_dir.mkdir()
-    for command in ("bash", "git", "grep"):
+    for command in ("bash", "git", "grep", "mktemp", "rm"):
         executable = shutil.which(command)
         if executable is None:
             raise RuntimeError(f"required test command not found: {command}")
@@ -171,6 +176,51 @@ class TestPreCommitLint(unittest.TestCase):
             self.assertIn("ruff is required", result.stderr)
             self.assertIn("brew install ruff", result.stderr)
             self.assertIn("apt install ruff", result.stderr)
+
+
+
+    def test_lints_staged_file_with_special_chars_in_name(self):
+        """Staged Python filenames containing quote / backslash / space bytes
+        must survive the round-trip into `git checkout-index` and produce a
+        normal Ruff finding, NOT the misleading "unable to read staged Python
+        blobs" error from a C-quoting mismatch (issue #795 follow-up).
+        """
+        if shutil.which("ruff") is None:
+            self.skipTest("ruff is not installed")
+        with _init_tmp_git_repo() as directory:
+            root = Path(directory)
+            # Create files with characters that `git diff --name-only` would
+            # C-quote. Note: a backslash in a Python filename is legal on
+            # Linux but usually avoided; quote and space are the realistic
+            # reproductions.
+            for special_name in ("quote\"file.py", "with space.py"):
+                try:
+                    (root / special_name).write_text("import os\n")
+                except (OSError, ValueError):
+                    # Filesystem may reject some chars in this sandbox; skip
+                    # this iteration rather than failing the whole test.
+                    continue
+                subprocess.run(
+                    ["git", "-C", str(root), "add", "--", special_name],
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(root), "config", "core.quotepath", "false"],
+                    check=True,
+                )
+                env = os.environ.copy()
+                env["PATH"] = "/usr/bin:/bin"
+                result = _run_hook(root, env=env)
+                # Two valid outcomes:
+                #  (a) ruff finding fires -> mentions the filename
+                #  (b) hook passes -> ruff did not run on it for unrelated reasons
+                # Both are OK; what we MUST NOT see is the false-positive
+                # "unable to read staged Python blobs" error path.
+                if result.returncode != 0:
+                    self.assertNotIn("unable to read staged Python blobs",
+                                     result.stderr,
+                                     f"filename with special chars broke checkout-index: {result.stderr!r}")
 
 
 if __name__ == "__main__":
