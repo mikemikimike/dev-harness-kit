@@ -85,6 +85,37 @@ class TestPreCommitLint(unittest.TestCase):
             self.assertIn("ruff check --fix", result.stderr)
             self.assertIn("git commit --no-verify", result.stderr)
 
+    def test_ruff_remediation_command_quotes_shell_metacharacters(self):
+        with _init_tmp_git_repo() as directory:
+            root = Path(directory)
+            special_name = "unsafe;echo-INJECTED.py"
+            (root / special_name).write_text("import os\n")
+            subprocess.run(["git", "-C", str(root), "add", "--", special_name], check=True)
+
+            env = _path_without_ruff(root)
+            (root / "bin-without-ruff" / "ruff").write_text("#!/bin/sh\nexit 42\n")
+            (root / "bin-without-ruff" / "ruff").chmod(0o755)
+            result = _run_hook(root, env=env)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(r"unsafe\;echo-INJECTED.py", result.stderr)
+            self.assertNotIn(special_name, result.stderr)
+
+    def test_conflict_marker_output_quotes_control_bytes(self):
+        with _init_tmp_git_repo() as directory:
+            root = Path(directory)
+            special_name = "bad\x1b[2J.txt"
+            (root / special_name).write_text("<<<<<<< HEAD\n")
+            subprocess.run(["git", "-C", str(root), "add", "--", special_name], check=True)
+
+            result = _run_hook(root, env=_path_without_ruff(root))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("conflict marker", result.stderr.lower())
+            self.assertNotIn("\x1b", result.stderr)
+            self.assertIn("bad", result.stderr)
+            self.assertIn("2J", result.stderr)
+
     def test_lints_staged_blob_not_worktree(self):
         if shutil.which("ruff") is None:
             self.skipTest("ruff is not installed")

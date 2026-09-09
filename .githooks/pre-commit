@@ -41,7 +41,9 @@ if git grep --cached -z -n -E '^[ \t]*(<{7}|={7}|\|{7}|>{7})' -- . > "$grep_tmp"
   # Print one finding per line.
   while IFS= read -r -d '' hit; do
     if [ -n "$hit" ]; then
-      printf '%s\n' "$hit" >&2
+      # `%q` renders paths and matched content as a shell-safe, single-line
+      # representation, so control bytes cannot spoof the terminal.
+      printf '%q\n' "$hit" >&2
     fi
   done < "$grep_tmp"
   rm -f -- "$grep_tmp"
@@ -128,7 +130,9 @@ else
 fi
 if [ "$ruff_status" -ne 0 ]; then
   echo "[pre-commit] BLOCKED: commit blocked by Ruff findings." >&2
-  echo "[pre-commit] Run: ruff check --fix -- ${staged_files[*]}" >&2
+  printf '[pre-commit] Run: ruff check --fix --' >&2
+  printf ' %q' "${staged_files[@]}" >&2
+  printf '\n' >&2
   echo "[pre-commit] Review the fixes, git add them, then retry the commit." >&2
   echo "[pre-commit] Emergency hotfix only: git commit --no-verify" >&2
   exit "$ruff_status"
